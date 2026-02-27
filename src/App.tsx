@@ -102,6 +102,30 @@ export default function App() {
 
   const selectedModel = modelOptions.find((option) => option.id === selectedModelId) || modelOptions[0];
 
+  const modelOptions: ModelOption[] = [
+    {
+      id: 'gemini-2.5-flash',
+      label: 'Gemini 2.5 Flash',
+      provider: 'gemini',
+      apiPath: '/api/generate-proof',
+    },
+    {
+      id: 'deepseek-chat',
+      label: 'DeepSeek Chat',
+      provider: 'deepseek',
+      apiPath: '/api/generate-proof-deepseek',
+    },
+    {
+      id: 'deepseek-reasoner',
+      label: 'DeepSeek Reasoner',
+      provider: 'deepseek',
+      apiPath: '/api/generate-proof-deepseek',
+    },
+  ];
+
+  const selectedModel =
+    modelOptions.find((option) => option.id === selectedModelId) || modelOptions[0];
+
   const literatureMatches: LiteratureMatch[] = [
     {
       title: 'Adaptive Thresholding with Finite-Sample Guarantees',
