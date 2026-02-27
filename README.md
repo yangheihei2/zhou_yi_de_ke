@@ -1,65 +1,44 @@
 # Proof Assistant（Vite + React + Vercel）
 
-这是一个数学证明助手前端应用，使用 React + Vite 构建，调用 Gemini 生成证明内容。
+这是一个数学证明助手应用，前端使用 React + Vite，后端使用 Vercel Serverless Functions，支持 **Gemini** 和 **DeepSeek** 两套模型。
 
-## 你这次需要做的事情（部署到 Vercel）
+## 你需要做的事（部署到 Vercel）
 
-1. 把代码推送到 GitHub。
+1. 把仓库推送到 GitHub。
 2. 在 Vercel 导入该仓库。
-3. 在 Vercel 项目设置里配置环境变量：
-   - `GEMINI_API_KEY` = 你的 Gemini API Key
-4. 触发 Deploy。
-5. 部署后打开页面，点击 `Generate Proof` 验证接口是否正常。
-
-> 这个版本已经把 Gemini 调用迁移到 `/api/generate-proof` 服务端函数，避免把 key 直接暴露在浏览器端。
+3. 在 Vercel 环境变量中至少配置：
+   - `GEMINI_API_KEY`
+   - `DEEPSEEK_API_KEY`（如果你要在页面选择 DeepSeek）
+4. 点击 Deploy。
+5. 部署后打开页面：先选模型，再点击 `Generate Proof`。
 
 ---
 
-## 模型说明（重点）
+## 模型与 API 架构
 
-当前后端使用的是 **Gemini 2.5 Flash**（在 `api/generate-proof.ts` 中定义）。
+### 前端模型选择
 
-### 1) 这个模型在本项目里做什么
+现在界面里可直接选择模型：
+- `Gemini 2.5 Flash`
+- `DeepSeek Chat`
+- `DeepSeek Reasoner`
 
-在你点击 `Generate Proof` 后，前端会把：
-- `theorem`（定理陈述）
-- `assumptions`（已知条件）
+前端会把 `theorem + assumptions + model` 发给对应 API。
 
-发到服务端 `/api/generate-proof`。服务端把这两部分拼成 prompt，交给 Gemini 生成一段 LaTeX 风格证明文本，再返回给前端展示。
+### 后端 API 列表
 
-### 2) 为什么选择 Gemini 2.5 Flash
+- `POST /api/generate-proof`
+  - 用于 Gemini。
+  - 默认模型：`gemini-2.5-flash`。
+- `POST /api/generate-proof-deepseek`
+  - 用于 DeepSeek。
+  - 支持模型：`deepseek-chat`、`deepseek-reasoner`。
 
-对于这个场景（交互式写作 + 证明草稿生成），Flash 模型通常有这几个优势：
-- **响应速度快**：前端交互体验更好。
-- **成本更友好**：适合反复调试 prompt。
-- **质量足够**：用于数学证明草稿、结构化文本生成通常够用。
+### 为什么这样设计
 
-如果后续你追求更强推理深度，可以改成更高能力模型（代价是延迟和成本可能上升）。
-
-### 3) 这个模型的输入/输出格式
-
-- 输入：纯文本 prompt（包含 theorem + assumptions + 输出格式要求）。
-- 输出：字符串文本（这里约定是 LaTeX 风格内容，含 Theorem/Proof 结构）。
-
-### 4) 你要注意的边界
-
-- **模型并不保证 100% 数学正确**，尤其是复杂定理。
-- 输出可能“看起来很正规”但存在逻辑漏洞，建议人工校验关键步骤。
-- 当 key/配额/网络异常时，会返回 `Gemini request failed`。
-
-### 5) 如何换模型（可选）
-
-现在模型名写在后端文件 `api/generate-proof.ts`：
-
-```ts
-const model = 'gemini-2.5-flash';
-```
-
-你可以直接替换成你想用的模型版本并重新部署。
-
-### 6) 安全性为什么更好
-
-Gemini API 调用已经在服务端完成，浏览器只请求你自己的 `/api/generate-proof`，不会直接携带 `GEMINI_API_KEY`，因此比前端直连更安全。
+- **安全**：API Key 只在服务端读取，不进入浏览器 bundle。
+- **可扩展**：后面你要加更多模型，按同样方式加 API 或路由分发即可。
+- **更好排障**：Gemini / DeepSeek 错误来源分离，更容易定位问题。
 
 ---
 
@@ -77,19 +56,22 @@ npm install
 cp .env.example .env.local
 ```
 
-然后编辑 `.env.local`：
+编辑 `.env.local`：
 
 ```env
-GEMINI_API_KEY=your_real_key
+GEMINI_API_KEY=your_real_gemini_key
+DEEPSEEK_API_KEY=your_real_deepseek_key
 ```
 
-### 3) 启动开发环境
+> 若只测试 Gemini，可只配 `GEMINI_API_KEY`；但在 UI 选 DeepSeek 时必须有 `DEEPSEEK_API_KEY`。
+
+### 3) 启动开发
 
 ```bash
 npm run dev
 ```
 
-默认端口：`3000`。
+默认地址：`http://localhost:3000`
 
 ---
 
@@ -102,46 +84,24 @@ npm run build
 
 ---
 
-## Vercel 部署说明
+## 常见问题
 
-### 方式 A：在网页里点选（推荐）
+### 1) `Server env GEMINI_API_KEY is not configured.`
 
-- 打开 [https://vercel.com/new](https://vercel.com/new)
-- 选择你的 GitHub 仓库
-- Framework Preset 选择 `Vite`（本项目已在 `vercel.json` 声明）
-- Environment Variables 添加：
-  - `GEMINI_API_KEY`
-- 点击 Deploy
+Gemini key 未配置（本地或 Vercel）。
 
-### 方式 B：Vercel CLI
+### 2) `Server env DEEPSEEK_API_KEY is not configured.`
 
-```bash
-npm i -g vercel
-vercel
-```
+你选择了 DeepSeek 模型，但服务端没有 `DEEPSEEK_API_KEY`。
 
-首次部署跟随提示绑定项目；然后到 Vercel Dashboard 补充 `GEMINI_API_KEY` 后重新部署。
+### 3) `Gemini request failed` 或 `DeepSeek request failed`
 
----
+可能原因：
+- key 无效 / 过期
+- 配额不足
+- 服务临时波动
 
-## 常见问题排查
-
-### 1) 页面报错：`Server env GEMINI_API_KEY is not configured.`
-
-说明 Vercel（或本地）没有配置 `GEMINI_API_KEY`。
-
-### 2) 点击生成后提示 `Gemini request failed`
-
-可能是：
-- key 无效或过期
-- 账号配额不足
-- 网络/区域问题
-
-建议先在本地确认 `.env.local` 生效，再看 Vercel 项目环境变量是否配置在正确环境（Production / Preview / Development）。
-
-### 3) 为什么不直接在前端读取 key？
-
-因为前端变量会打包进浏览器代码，存在泄露风险。现在改为通过 Vercel Serverless Function 调用 Gemini，安全性更好。
+建议先本地验证 key，再检查 Vercel 中是否配置在正确环境（Production / Preview / Development）。
 
 ---
 
@@ -150,9 +110,10 @@ vercel
 ```text
 .
 ├─ api/
-│  └─ generate-proof.ts      # Vercel Serverless Function，负责调用 Gemini
+│  ├─ generate-proof.ts              # Gemini API
+│  └─ generate-proof-deepseek.ts     # DeepSeek API
 ├─ src/
-│  ├─ App.tsx                # 前端页面与交互
+│  ├─ App.tsx
 │  ├─ main.tsx
 │  └─ index.css
 ├─ .env.example

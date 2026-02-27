@@ -42,6 +42,15 @@ interface GenerateProofResponse {
   proof: string;
 }
 
+type ModelProvider = 'gemini' | 'deepseek';
+
+interface ModelOption {
+  id: string;
+  label: string;
+  provider: ModelProvider;
+  apiPath: string;
+}
+
 export default function App() {
   const [theorem, setTheorem] = useState("Prove that every continuous function on a closed interval [a, b] is bounded and attains its maximum and minimum values.");
   const [assumptions, setAssumptions] = useState("- f is continuous on the interval I = [a, b]\n- I is compact in the standard topology of R");
@@ -53,8 +62,33 @@ export default function App() {
   const [proof, setProof] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'formatted' | 'source'>('formatted');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState('gemini-2.5-flash');
   
   const logEndRef = useRef<HTMLDivElement>(null);
+
+  const modelOptions: ModelOption[] = [
+    {
+      id: 'gemini-2.5-flash',
+      label: 'Gemini 2.5 Flash',
+      provider: 'gemini',
+      apiPath: '/api/generate-proof',
+    },
+    {
+      id: 'deepseek-chat',
+      label: 'DeepSeek Chat',
+      provider: 'deepseek',
+      apiPath: '/api/generate-proof-deepseek',
+    },
+    {
+      id: 'deepseek-reasoner',
+      label: 'DeepSeek Reasoner',
+      provider: 'deepseek',
+      apiPath: '/api/generate-proof-deepseek',
+    },
+  ];
+
+  const selectedModel =
+    modelOptions.find((option) => option.id === selectedModelId) || modelOptions[0];
 
   const literatureMatches: LiteratureMatch[] = [
     {
@@ -97,7 +131,7 @@ export default function App() {
     setProof(null);
     setErrorMessage(null);
     setProgress(1);
-    addLog('Querying vector database for relevant literature...', 'info');
+    addLog(`Querying vector database for relevant literature (${selectedModel.label})...`, 'info');
     
     // Simulate multi-agent workflow
     setTimeout(() => {
@@ -113,12 +147,12 @@ export default function App() {
     }, 4000);
 
     try {
-      const response = await fetch('/api/generate-proof', {
+      const response = await fetch(selectedModel.apiPath, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ theorem, assumptions }),
+        body: JSON.stringify({ theorem, assumptions, model: selectedModel.id }),
       });
 
       if (!response.ok) {
@@ -133,7 +167,7 @@ export default function App() {
         setProof(data.proof || "Failed to generate proof.");
         setIsGenerating(false);
         addLog('LaTeX Refiner completed formatting.', 'success');
-        addLog('Proof generation successful.', 'success');
+        addLog(`Proof generation successful via ${selectedModel.label}.`, 'success');
       }, 6000);
 
     } catch (error: unknown) {
@@ -169,7 +203,18 @@ export default function App() {
           <div className="flex items-center gap-6">
             <div className="text-right hidden sm:block">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Model</div>
-              <div className="text-sm font-bold text-slate-700">Gemini 2.5 Flash</div>
+              <select
+                value={selectedModelId}
+                onChange={(event) => setSelectedModelId(event.target.value)}
+                className="text-sm font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded px-2 py-1"
+                disabled={isGenerating}
+              >
+                {modelOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
             
             <button 

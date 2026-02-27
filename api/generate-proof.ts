@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 
-const model = 'gemini-2.5-flash';
+const defaultModel = 'gemini-2.5-flash';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
@@ -14,6 +14,8 @@ export default async function handler(req: any, res: any) {
 
   const theorem = typeof req.body?.theorem === 'string' ? req.body.theorem : '';
   const assumptions = typeof req.body?.assumptions === 'string' ? req.body.assumptions : '';
+  const requestedModel = typeof req.body?.model === 'string' ? req.body.model : defaultModel;
+  const model = requestedModel.startsWith('gemini-') ? requestedModel : defaultModel;
 
   if (!theorem.trim()) {
     return res.status(400).json({ error: 'Theorem is required.' });
