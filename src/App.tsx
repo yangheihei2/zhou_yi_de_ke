@@ -23,10 +23,6 @@ import {
   Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from "@google/genai";
-
-// Initialize Gemini API
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
 interface LogEntry {
   timestamp: string;
@@ -42,6 +38,10 @@ interface LiteratureMatch {
   tags: string[];
 }
 
+interface GenerateProofResponse {
+  proof: string;
+}
+
 export default function App() {
   const [theorem, setTheorem] = useState("Prove that every continuous function on a closed interval [a, b] is bounded and attains its maximum and minimum values.");
   const [assumptions, setAssumptions] = useState("- f is continuous on the interval I = [a, b]\n- I is compact in the standard topology of R");
@@ -52,6 +52,7 @@ export default function App() {
   ]);
   const [proof, setProof] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'formatted' | 'source'>('formatted');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -94,6 +95,7 @@ export default function App() {
     
     setIsGenerating(true);
     setProof(null);
+    setErrorMessage(null);
     setProgress(1);
     addLog('Querying vector database for relevant literature...', 'info');
     
@@ -111,34 +113,32 @@ export default function App() {
     }, 4000);
 
     try {
-      const model = "gemini-3-flash-preview";
-      const prompt = `You are a mathematical proof assistant. 
-      Theorem: ${theorem}
-      Assumptions: ${assumptions}
-      
-      Generate a formal, rigorous mathematical proof in LaTeX format. 
-      Include a "Theorem" section and a "Proof" section. 
-      Use bold text for key theorems like "Heine-Borel Theorem".
-      End the proof with a QED symbol (■).
-      Make it look like a professional academic paper.`;
-
-      const response = await genAI.models.generateContent({
-        model,
-        contents: prompt,
+      const response = await fetch('/api/generate-proof', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ theorem, assumptions }),
       });
 
-      const result = response.text;
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to generate proof.');
+      }
+
+      const data: GenerateProofResponse = await response.json();
       
       setTimeout(() => {
         setProgress(4);
-        setProof(result || "Failed to generate proof.");
+        setProof(data.proof || "Failed to generate proof.");
         setIsGenerating(false);
         addLog('LaTeX Refiner completed formatting.', 'success');
         addLog('Proof generation successful.', 'success');
       }, 6000);
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error(error);
+      setErrorMessage(error instanceof Error ? error.message : 'Unknown server error.');
       addLog('Error during proof generation.', 'error');
       setIsGenerating(false);
     }
@@ -169,7 +169,7 @@ export default function App() {
           <div className="flex items-center gap-6">
             <div className="text-right hidden sm:block">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Model</div>
-              <div className="text-sm font-bold text-slate-700">Gemini 3 Flash</div>
+              <div className="text-sm font-bold text-slate-700">Gemini 2.5 Flash</div>
             </div>
             
             <button 
@@ -207,6 +207,11 @@ export default function App() {
             </div>
             
             <div className="space-y-6">
+              {errorMessage && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {errorMessage}
+                </div>
+              )}
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Theorem Statement</label>
                 <textarea 
