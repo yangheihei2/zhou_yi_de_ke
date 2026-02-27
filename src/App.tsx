@@ -169,7 +169,7 @@ export default function App() {
           <div className="flex items-center gap-6">
             <div className="text-right hidden sm:block">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Model</div>
-              <div className="text-sm font-bold text-slate-700">Gemini 3 Flash</div>
+              <div className="text-sm font-bold text-slate-700">Gemini 2.5 Flash</div>
             </div>
             
             <button 
