@@ -34,9 +34,12 @@
 
 1. **问题理解**：读取 Theorem + Assumptions。  
 2. **参考线索匹配**：根据关键词匹配内置文献候选（模拟检索与重排）。  
-3. **思路生成**：调用 ideas API，先返回证明想法和候选定理。  
-4. **证明生成**：调用 proof API，输出结构化证明（Theorem / Key Lemmas / Proof / Conclusion）。  
-5. **前端编译展示**：用 MathJax 渲染，得到接近“编译后”的阅读体验。
+3. **Generator**：生成候选证明与可能思路。  
+4. **Verifier**：判定 `PASS / MINOR_FIX / REGENERATE`。  
+5. **Reviser**：若是可局部修复问题，按反馈进行最小修订后回到 Verifier。  
+6. **Regenerate**：若是严重缺陷，回到 Generator 重新生成。  
+7. **终止策略**：达到轮次上限时返回“最佳可用解 + 风险说明”。  
+8. **前端编译展示**：用 MathJax 渲染，得到接近“编译后”的阅读体验。
 
 > 这样设计的好处：
 > - 用户先看到“为什么这么证”，而不是只看到“结果”。
@@ -56,6 +59,10 @@
 - `POST /api/generate-ideas-deepseek`：DeepSeek 思路生成
 - `POST /api/generate-proof`：Gemini 证明生成
 - `POST /api/generate-proof-deepseek`：DeepSeek 证明生成
+- `POST /api/verify-proof`：Gemini 证明校验
+- `POST /api/verify-proof-deepseek`：DeepSeek 证明校验
+- `POST /api/revise-proof`：Gemini 小修订
+- `POST /api/revise-proof-deepseek`：DeepSeek 小修订
 
 ---
 
@@ -132,7 +139,11 @@ npm run build
 │  ├─ generate-ideas.ts
 │  ├─ generate-ideas-deepseek.ts
 │  ├─ generate-proof.ts
-│  └─ generate-proof-deepseek.ts
+│  ├─ generate-proof-deepseek.ts
+│  ├─ verify-proof.ts
+│  ├─ verify-proof-deepseek.ts
+│  ├─ revise-proof.ts
+│  └─ revise-proof-deepseek.ts
 ├─ src/
 │  ├─ App.tsx
 │  ├─ main.tsx
