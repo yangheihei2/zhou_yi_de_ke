@@ -82,8 +82,49 @@ function normalizeForMathJax(content: string) {
     .replace(/\\usepackage\{[^}]+\}/g, '')
     .replace(/\\begin\{document\}/g, '')
     .replace(/\\end\{document\}/g, '')
+    .replace(/^\s*#+\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
     .trim();
 }
+
+const LITERATURE_CORPUS: LiteratureMatch[] = [
+  {
+    title: 'Adaptive Thresholding with Finite-Sample Guarantees',
+    authors: 'L. Xu, M. Patel (2023)',
+    source: 'arXiv:2302.10211 [stat.ML]',
+    score: 0.98,
+    tags: ['Concentration Bounds', 'Order Statistics'],
+  },
+  {
+    title: 'Conformal Risk Control for Selective Classification',
+    authors: 'J. S. Park et al. (2022)',
+    source: 'NeurIPS',
+    score: 0.91,
+    tags: ['Selective Classification', 'Error Control'],
+  },
+  {
+    title: 'Almost Sure Convergence and Probability Limits',
+    authors: 'A. N. Shiryaev (2018)',
+    source: 'Probability-2 (Springer)',
+    score: 0.89,
+    tags: ['Convergence', 'Measure Theory'],
+  },
+  {
+    title: 'Empirical Bernstein Bounds and Confidence Sequences',
+    authors: 'H. Howard et al. (2021)',
+    source: 'Annals of Statistics',
+    score: 0.86,
+    tags: ['Concentration Bounds', 'Sequential Inference'],
+  },
+  {
+    title: 'The Extremum Value Theorem: A Metric Space Perspective',
+    authors: 'H. Miller, S. Grant (2022)',
+    source: 'arXiv:2104.0932 [math.CA]',
+    score: 0.72,
+    tags: ['Real Analysis', 'Compactness'],
+  },
+];
 
 export default function App() {
   const [theorem, setTheorem] = useState(
@@ -110,29 +151,36 @@ export default function App() {
   const selectedModel =
     MODEL_OPTIONS.find((option) => option.id === selectedModelId) || MODEL_OPTIONS[0];
 
-  const literatureMatches: LiteratureMatch[] = [
-    {
-      title: 'Adaptive Thresholding with Finite-Sample Guarantees',
-      authors: 'L. Xu, M. Patel (2023)',
-      source: 'arXiv:2302.10211 [stat.ML]',
-      score: 0.98,
-      tags: ['Concentration Bounds', 'Order Statistics'],
-    },
-    {
-      title: 'Conformal Risk Control for Selective Classification',
-      authors: 'J. S. Park et al. (2022)',
-      source: 'NeurIPS',
-      score: 0.91,
-      tags: ['Selective Classification', 'Error Control'],
-    },
-    {
-      title: 'The Extremum Value Theorem: A Metric Space Perspective',
-      authors: 'H. Miller, S. Grant (2022)',
-      source: 'arXiv:2104.0932 [math.CA]',
-      score: 0.72,
-      tags: ['Real Analysis', 'Compactness'],
-    },
-  ];
+  const literatureMatches = useMemo(() => {
+    const workspaceText = `${theorem} ${assumptions}`.toLowerCase();
+
+    const keywordGroups: Record<string, string[]> = {
+      'Concentration Bounds': ['hoeffding', 'bernstein', 'concentration', 'high probability', 'finite-sample'],
+      'Order Statistics': ['order statistic', 'quantile', 'threshold', 'k_i', 't_i', 't\\prime_i', 'rank'],
+      'Selective Classification': ['selective', 'reject option', 'classification', 'risk control'],
+      'Error Control': ['error', 'delta', 'bonferroni', 'union bound', 'confidence'],
+      Convergence: ['almost sure', 'a.s.', 'converge', 'convergence', 'probability limit'],
+      'Measure Theory': ['probability space', 'sigma', 'measure', 'random variable'],
+      'Sequential Inference': ['sequence', 'online', 'sequential'],
+      'Real Analysis': ['continuous', 'compact', 'closed interval', 'extreme value'],
+      Compactness: ['compactness', 'metric space'],
+    };
+
+    const dynamicMatches = LITERATURE_CORPUS.map((paper) => {
+      const hitCount = paper.tags.reduce((count, tag) => {
+        const keywords = keywordGroups[tag] || [];
+        const matched = keywords.some((keyword) => workspaceText.includes(keyword));
+        return count + (matched ? 1 : 0);
+      }, 0);
+
+      const adjustedScore = Math.min(0.99, paper.score + hitCount * 0.03);
+      return { ...paper, score: adjustedScore };
+    })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4);
+
+    return dynamicMatches;
+  }, [theorem, assumptions]);
 
   const topReference = useMemo(
     () => [...literatureMatches].sort((a, b) => b.score - a.score)[0],
@@ -341,12 +389,12 @@ export default function App() {
               <h2 className="font-bold text-slate-900 flex items-center gap-2">
                 <BookOpen size={18} className="text-[#064e3b]" /> Literature Search
               </h2>
-              <span className="text-[10px] px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full font-bold border border-emerald-100">12 MATCHES</span>
+              <span className="text-[10px] px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-full font-bold border border-emerald-100">{literatureMatches.length} MATCHES</span>
             </div>
 
             <div className="relative mb-6">
               <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input type="text" placeholder="Search academic archives..." className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-11 pr-4 text-sm" />
+              <input type="text" value={theorem ? theorem.slice(0, 60) : ''} readOnly placeholder="Search academic archives..." className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-11 pr-4 text-sm text-slate-600" />
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
@@ -456,10 +504,10 @@ export default function App() {
                     {activeTab === 'formatted' ? (
                       <div>
                         <div className="text-center mb-8">
-                          <h3 className="text-2xl font-bold text-slate-900 mb-1 font-serif">Compiled Mathematical Proof</h3>
+                          <h3 className="text-xl font-bold text-slate-900 mb-1 font-serif">Compiled Mathematical Proof</h3>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] font-sans">MathJax Rendering</p>
                         </div>
-                        <div ref={proofRef} className="whitespace-pre-wrap text-lg leading-8 [&_.MathJax]:!text-slate-800">{normalizeForMathJax(proof)}</div>
+                        <div ref={proofRef} className="whitespace-pre-wrap text-base leading-7 [&_.MathJax]:!text-slate-800">{normalizeForMathJax(proof)}</div>
                       </div>
                     ) : (
                       <pre className="font-mono text-xs bg-slate-50 p-6 rounded-lg border border-slate-200 overflow-x-auto">{proof}</pre>
