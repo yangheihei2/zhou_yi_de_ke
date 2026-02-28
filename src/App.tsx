@@ -109,15 +109,15 @@ declare global {
 
 function buildPipelineErrorMessage(stage: string, rawError: string) {
   const stageMap: Record<string, string> = {
-    initialization: '初始化',
-    'idea brainstorming': '思路生成',
-    'candidate proof generation': '候选证明生成',
-    'proof verification': '证明校验',
-    'proof revision': '证明修订',
+    initialization: 'initialization',
+    'idea brainstorming': 'idea brainstorming',
+    'candidate proof generation': 'candidate proof generation',
+    'proof verification': 'proof verification',
+    'proof revision': 'proof revision',
   };
 
   const displayStage = stageMap[stage] || stage;
-  return `流程在「${displayStage}」阶段失败：${rawError}`;
+  return `Pipeline failed during ${displayStage}: ${rawError}`;
 }
 
 function normalizeForMathJax(content: string) {
@@ -294,19 +294,21 @@ export default function App() {
       return `${baseProof}\n\n---\n\nRisk Notes:\n${riskNotes.map((note, index) => `${index + 1}. ${note}`).join('\n')}`;
     };
 
-    const parseApiError = (body: ApiErrorPayload, fallback: string) => {
+    const parseApiError = (body: ApiErrorPayload, fallback: string, status?: number, statusText?: string, rawText?: string) => {
       const headline = body.error || fallback;
       const code = body.errorCode ? ` [${body.errorCode}]` : '';
-      const hint = body.userHint ? ` 建议：${body.userHint}` : '';
-      const summary = body.summary ? ` 失败详情：${body.summary}` : '';
+      const hint = body.userHint ? ` Hint: ${body.userHint}` : '';
+      const summary = body.summary ? ` Details: ${body.summary}` : '';
       const attempts = Array.isArray(body.attempts)
         ? body.attempts
             .slice(0, 4)
             .map((attempt, idx) => `${idx + 1}) ${attempt.model || 'unknown-model'}/${attempt.promptType || 'unknown-prompt'}: ${attempt.detail || attempt.status || 'no detail'}`)
-            .join('；')
+            .join('; ')
         : '';
-      const attemptText = attempts ? ` 尝试记录：${attempts}` : '';
-      return `${headline}${code}.${hint}${summary}${attemptText}`.trim();
+      const attemptText = attempts ? ` Attempts: ${attempts}` : '';
+      const http = typeof status === 'number' ? ` HTTP ${status}${statusText ? ` ${statusText}` : ''}.` : '';
+      const raw = !body.error && rawText ? ` Raw response: ${rawText.slice(0, 280)}` : '';
+      return `${headline}${code}.${http}${hint}${summary}${attemptText}${raw}`.trim();
     };
 
     const fetchProof = async () => {
@@ -317,12 +319,20 @@ export default function App() {
         body: JSON.stringify({ theorem, assumptions, model: selectedModelOption.id }),
       });
 
-      if (!proofResponse.ok) {
-        const body: ApiErrorPayload = await proofResponse.json().catch(() => ({}));
-        throw new Error(parseApiError(body, 'Failed to generate proof.'));
+      const rawText = await proofResponse.text();
+      let parsedBody: ApiErrorPayload | GenerateProofResponse = {};
+      try {
+        parsedBody = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        parsedBody = {};
       }
 
-      const proofData: GenerateProofResponse = await proofResponse.json();
+      if (!proofResponse.ok) {
+        const body = parsedBody as ApiErrorPayload;
+        throw new Error(parseApiError(body, 'Failed to generate proof.', proofResponse.status, proofResponse.statusText, rawText));
+      }
+
+      const proofData = parsedBody as GenerateProofResponse;
       const candidate = typeof proofData.proof === 'string' ? proofData.proof.trim() : '';
       if (!candidate) {
         throw new Error('Generator returned an empty proof. This usually indicates an upstream model timeout or empty response.');

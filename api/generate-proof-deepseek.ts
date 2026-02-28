@@ -62,7 +62,7 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({
       error: 'Server env DEEPSEEK_API_KEY is not configured.',
       errorCode: 'DEEPSEEK_KEY_MISSING',
-      userHint: '请先在服务端配置 DEEPSEEK_API_KEY。',
+      userHint: 'Please configure DEEPSEEK_API_KEY on the server before using DeepSeek models.',
     });
   }
 
@@ -131,7 +131,7 @@ export default async function handler(req: any, res: any) {
     return res.status(502).json({
       error: 'DeepSeek proof generation failed after all fallback attempts.',
       errorCode: 'DEEPSEEK_GENERATION_ALL_ATTEMPTS_FAILED',
-      userHint: '模型请求已自动重试并切换模型，但仍失败。请稍后重试，或先切换到 Gemini 验证输入是否正常。',
+      userHint: 'All retries and model fallbacks failed. Please retry later, or switch to Gemini to validate whether the input is fine.',
       summary: buildReadableSummary(attempts),
       attempts,
     });
@@ -141,7 +141,7 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({
       error: message,
       errorCode: 'DEEPSEEK_GENERATION_UNCAUGHT_ERROR',
-      userHint: '服务端出现未捕获错误，请查看日志。',
+      userHint: 'An uncaught server error occurred. Please check server logs for details.',
     });
   }
 }
