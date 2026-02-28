@@ -161,6 +161,7 @@ export default function App() {
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const proofRef = useRef<HTMLDivElement>(null);
+  const ideasRef = useRef<HTMLDivElement>(null);
 
   const selectedModelOption = MODEL_OPTIONS.find((option) => option.id === selectedModelId) || MODEL_OPTIONS[0];
 
@@ -228,9 +229,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!proof || activeTab !== 'formatted' || !window.MathJax?.typesetPromise || !proofRef.current) return;
-    window.MathJax.typesetPromise([proofRef.current]).catch((err) => console.error(err));
-  }, [proof, activeTab]);
+    if (!window.MathJax?.typesetPromise) return;
+
+    const elements: HTMLElement[] = [];
+    if (proof && activeTab === 'formatted' && proofRef.current) {
+      elements.push(proofRef.current);
+    }
+    if ((possibleIdeas.length > 0 || candidateTheorems.length > 0) && ideasRef.current) {
+      elements.push(ideasRef.current);
+    }
+
+    if (elements.length === 0) return;
+    window.MathJax.typesetPromise(elements).catch((err) => console.error(err));
+  }, [proof, activeTab, possibleIdeas, candidateTheorems]);
 
   const handleGenerate = async () => {
     if (isGenerating) return;
@@ -529,21 +540,21 @@ export default function App() {
                   : 'Click Generate Proof to let AI produce possible proof ideas for this workspace.'}
               </div>
             ) : (
-              <>
+              <div ref={ideasRef} className="[&_.MathJax]:!text-slate-700">
                 <ul className="space-y-2 list-disc pl-4 text-sm text-slate-700 mb-4">
                   {possibleIdeas.map((idea) => (
-                    <li key={idea}>{idea}</li>
+                    <li key={idea} className="leading-relaxed whitespace-pre-wrap">{normalizeForMathJax(idea)}</li>
                   ))}
                 </ul>
                 <div className="space-y-2">
                   {candidateTheorems.map((theorem) => (
                     <div key={theorem.name} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                      <div className="text-xs font-bold text-slate-800">{theorem.name}</div>
-                      <div className="text-[11px] text-slate-500">{theorem.why}</div>
+                      <div className="text-xs font-bold text-slate-800 whitespace-pre-wrap [&_.MathJax]:!text-slate-800">{normalizeForMathJax(theorem.name)}</div>
+                      <div className="text-[11px] text-slate-500 whitespace-pre-wrap [&_.MathJax]:!text-slate-500">{normalizeForMathJax(theorem.why)}</div>
                     </div>
                   ))}
                 </div>
-              </>
+              </div>
             )}
           </section>
         </div>

@@ -1,3 +1,5 @@
+import { callDeepSeek } from './deepseek-client';
+
 const defaultModel = 'deepseek-chat';
 const allowedModels = new Set(['deepseek-chat', 'deepseek-reasoner']);
 
@@ -63,31 +65,19 @@ Rules:
 - feedback must mention the most important issue succinctly.`;
 
   try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-      }),
+    const data = await callDeepSeek({
+      apiKey,
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1,
     });
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error('DeepSeek verifier API error:', response.status, errBody);
-      return res.status(500).json({ error: 'DeepSeek verification failed.' });
-    }
-
-    const data = await response.json();
     const text = data?.choices?.[0]?.message?.content ?? '{}';
     const payload = parseVerifierPayload(text);
     return res.status(200).json(payload);
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'DeepSeek verification failed.' });
+    console.error('DeepSeek verifier error:', error);
+    const message = error instanceof Error ? error.message : 'DeepSeek verification failed.';
+    return res.status(500).json({ error: message });
   }
 }
