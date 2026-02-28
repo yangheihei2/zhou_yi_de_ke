@@ -1,3 +1,5 @@
+import { callDeepSeek } from './deepseek-client';
+
 const defaultModel = 'deepseek-chat';
 const allowedModels = new Set(['deepseek-chat', 'deepseek-reasoner']);
 
@@ -68,31 +70,19 @@ Requirements:
 - response language: English.`;
 
   try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.2,
-      }),
+    const data = await callDeepSeek({
+      apiKey,
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
     });
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error('DeepSeek ideas API error:', response.status, errBody);
-      return res.status(500).json({ error: 'DeepSeek ideas generation failed.' });
-    }
-
-    const data = await response.json();
     const text = data?.choices?.[0]?.message?.content ?? '{}';
     const payload = parseIdeasPayload(text);
     return res.status(200).json(payload);
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'DeepSeek ideas generation failed.' });
+    console.error('DeepSeek ideas error:', error);
+    const message = error instanceof Error ? error.message : 'DeepSeek ideas generation failed.';
+    return res.status(500).json({ error: message });
   }
 }

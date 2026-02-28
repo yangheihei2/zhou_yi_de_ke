@@ -1,3 +1,5 @@
+import { callDeepSeek } from './deepseek-client';
+
 const defaultModel = 'deepseek-chat';
 const allowedModels = new Set(['deepseek-chat', 'deepseek-reasoner']);
 
@@ -27,42 +29,24 @@ Assumptions: ${assumptions}
 Return a proof that can be directly rendered by MathJax in a web page.
 Requirements:
 1) Use readable sections: Theorem, Key Lemmas, Proof, and Conclusion.
-2) Write normal text plus math expressions using \(...\) and \[...\].
-3) Do not output full LaTeX document preamble (no \documentclass, \begin{document}, etc).
+2) Write normal text plus math expressions using \\(...\\) and \\[...\\].
+3) Do not output full LaTeX document preamble (no \\documentclass, \\begin{document}, etc).
 4) Keep the argument rigorous and concise.
-5) End with \qed or an explicit QED statement.`;
+5) End with \\qed or an explicit QED statement.`;
 
   try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.2,
-      }),
+    const data = await callDeepSeek({
+      apiKey,
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
     });
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error('DeepSeek API error:', response.status, errBody);
-      return res.status(500).json({ error: 'DeepSeek request failed. Please retry later.' });
-    }
-
-    const data = await response.json();
     const proof = data?.choices?.[0]?.message?.content;
-
     return res.status(200).json({ proof: proof ?? 'Failed to generate proof.' });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'DeepSeek request failed. Please retry later.' });
+    console.error('DeepSeek generator error:', error);
+    const message = error instanceof Error ? error.message : 'DeepSeek request failed. Please retry later.';
+    return res.status(500).json({ error: message });
   }
 }
