@@ -43,6 +43,11 @@ interface GenerateProofResponse {
   proof: string;
 }
 
+interface GenerateIdeasResponse {
+  ideas: string[];
+  candidateTheorems: CandidateTheorem[];
+}
+
 interface CandidateTheorem {
   name: string;
   why: string;
@@ -55,12 +60,13 @@ interface ModelOption {
   label: string;
   provider: ModelProvider;
   apiPath: string;
+  ideasApiPath: string;
 }
 
 const MODEL_OPTIONS: ModelOption[] = [
-  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'gemini', apiPath: '/api/generate-proof' },
-  { id: 'deepseek-chat', label: 'DeepSeek Chat', provider: 'deepseek', apiPath: '/api/generate-proof-deepseek' },
-  { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner', provider: 'deepseek', apiPath: '/api/generate-proof-deepseek' },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'gemini', apiPath: '/api/generate-proof', ideasApiPath: '/api/generate-ideas' },
+  { id: 'deepseek-chat', label: 'DeepSeek Chat', provider: 'deepseek', apiPath: '/api/generate-proof-deepseek', ideasApiPath: '/api/generate-ideas-deepseek' },
+  { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner', provider: 'deepseek', apiPath: '/api/generate-proof-deepseek', ideasApiPath: '/api/generate-ideas-deepseek' },
 ];
 
 declare global {
@@ -127,12 +133,8 @@ const LITERATURE_CORPUS: LiteratureMatch[] = [
 ];
 
 export default function App() {
-  const [theorem, setTheorem] = useState(
-    "Theorem 1. Given previous thresholds t_1, ..., t_{i-1}, consider all scores T_i on the left-out class S_{it}, and define T'_i={T_i(X) | X∈S_{it}, T_1(X)<t_1, ..., T_{i-1}(X)<t_{i-1}}. Let n_i and n'_i be the cardinalities of T_i and T'_i. Derive the threshold rule for t̄_i such that P(R_{i*}(∅)>α_i)≤δ_i holds.",
-  );
-  const [assumptions, setAssumptions] = useState(
-    '- Use order statistics t_{i(k)} and t\'_{i(k)} for T_i and T\'_i.\n- Define p̂_i=n\'_i/n_i, p_i=p̂_i + c(n_i), and c(n)=O(1/√n).\n- Let α\'_i=α_i/p_i and δ\'_i=δ_i-exp{-2n_i c^2(n_i)}.\n- If n\'_i ≥ log(δ\'_i)/log(1-α\'_i) and α\'_i<1, use adjusted threshold branch.',
-  );
+  const [theorem, setTheorem] = useState('');
+  const [assumptions, setAssumptions] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([
@@ -142,17 +144,19 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'formatted' | 'source'>('formatted');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState('gemini-2.5-flash');
+  const [possibleIdeas, setPossibleIdeas] = useState<string[]>([]);
+  const [candidateTheorems, setCandidateTheorems] = useState<CandidateTheorem[]>([]);
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const proofRef = useRef<HTMLDivElement>(null);
 
   const selectedModelOption = MODEL_OPTIONS.find((option) => option.id === selectedModelId) || MODEL_OPTIONS[0];
 
-  const selectedModel =
-    MODEL_OPTIONS.find((option) => option.id === selectedModelId) || MODEL_OPTIONS[0];
 
   const literatureMatches = useMemo(() => {
-    const workspaceText = `${theorem} ${assumptions}`.toLowerCase();
+    const workspaceText = `${theorem} ${assumptions}`.toLowerCase().trim();
+
+    if (!workspaceText) return [];
 
     const keywordGroups: Record<string, string[]> = {
       'Concentration Bounds': ['hoeffding', 'bernstein', 'concentration', 'high probability', 'finite-sample'],
@@ -186,38 +190,6 @@ export default function App() {
     () => [...literatureMatches].sort((a, b) => b.score - a.score)[0],
     [literatureMatches],
   );
-
-  const candidateTheorems = useMemo<CandidateTheorem[]>(() => {
-    if (!topReference) return [];
-
-    const byTag: Record<string, CandidateTheorem> = {
-      'Concentration Bounds': { name: 'Hoeffding Inequality', why: '可把经验统计量与真实风险偏差控制在高概率界内。' },
-      'Order Statistics': { name: 'Order-Statistic Quantile Lemma', why: '直接支撑 t_{i(k)} 与 t\'_i(k\'_i) 的分段阈值构造。' },
-      'Selective Classification': { name: 'Conformal Risk Control Bound', why: '把 under-classification error 约束转成可检验概率上界。' },
-      'Error Control': { name: 'Union Bound / Bonferroni Control', why: '用于多步阈值流程中的整体错误率控制。' },
-      Topology: { name: 'Compactness Principle', why: '在极值存在性问题中可作为基础支撑。' },
-      Compactness: { name: 'Extreme Value Theorem', why: '当问题涉及闭区间连续函数时可直接应用。' },
-    };
-
-    const picked = topReference.tags
-      .map((tag) => byTag[tag])
-      .filter((item): item is CandidateTheorem => Boolean(item));
-
-    return picked.length
-      ? picked
-      : [{ name: 'Direct construction + contradiction', why: '先构造阈值，再逐步验证每个分支满足风险约束。' }];
-  }, [topReference]);
-
-  const possibleIdeas = useMemo(() => {
-    if (!topReference) return [];
-    return [
-      '先把问题拆成：样本比例修正、阈值可行性条件、最终错误上界三步。',
-      '对 p_i、α′_i、δ′_i 的定义先单独证明可行域，再进入阈值主证明。',
-      '用 order statistics 写出 t_i(k_i) 与 t′_i(k′_i) 的分段定义，逐段验证风险控制不等式。',
-      `最匹配论文：${topReference.title}（score=${topReference.score.toFixed(2)}）。`,
-      `优先候选定理：${candidateTheorems.map((theorem) => theorem.name).join('；')}。`,
-    ];
-  }, [topReference, candidateTheorems]);
 
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
     const now = new Date();
@@ -254,6 +226,8 @@ export default function App() {
     setIsGenerating(true);
     setProof(null);
     setErrorMessage(null);
+    setPossibleIdeas([]);
+    setCandidateTheorems([]);
     setProgress(1);
     addLog(`Querying vector database for relevant literature (${selectedModelOption.label})...`, 'info');
 
@@ -269,21 +243,37 @@ export default function App() {
     }, 2800);
 
     try {
-      const response = await fetch(selectedModelOption.apiPath, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ theorem, assumptions, model: selectedModelOption.id }),
-      });
+      const [proofResponse, ideasResponse] = await Promise.all([
+        fetch(selectedModelOption.apiPath, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ theorem, assumptions, model: selectedModelOption.id }),
+        }),
+        fetch(selectedModelOption.ideasApiPath, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ theorem, assumptions, literature: literatureMatches, model: selectedModelOption.id }),
+        }),
+      ]);
 
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
+      if (!proofResponse.ok) {
+        const body = await proofResponse.json().catch(() => ({}));
         throw new Error(body.error || 'Failed to generate proof.');
       }
 
-      const data: GenerateProofResponse = await response.json();
+      const data: GenerateProofResponse = await proofResponse.json();
+      setProof(data.proof || 'Failed to generate proof.');
+
+      if (ideasResponse.ok) {
+        const ideasData: GenerateIdeasResponse = await ideasResponse.json();
+        setPossibleIdeas(Array.isArray(ideasData.ideas) ? ideasData.ideas : []);
+        setCandidateTheorems(Array.isArray(ideasData.candidateTheorems) ? ideasData.candidateTheorems : []);
+        addLog('AI generated possible proof ideas.', 'success');
+      } else {
+        addLog('Possible proof ideas generation failed, skipped this round.', 'warning');
+      }
 
       setProgress(4);
-      setProof(data.proof || 'Failed to generate proof.');
       setIsGenerating(false);
       addLog('LaTeX Refiner completed formatting.', 'success');
       addLog(`Proof generation successful via ${selectedModelOption.label}.`, 'success');
@@ -425,19 +415,27 @@ export default function App() {
             <h2 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
               <Lightbulb size={14} /> Possible Proof Ideas & Candidate Theorems
             </h2>
-            <ul className="space-y-2 list-disc pl-4 text-sm text-slate-700 mb-4">
-              {possibleIdeas.map((idea) => (
-                <li key={idea}>{idea}</li>
-              ))}
-            </ul>
-            <div className="space-y-2">
-              {candidateTheorems.map((theorem) => (
-                <div key={theorem.name} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="text-xs font-bold text-slate-800">{theorem.name}</div>
-                  <div className="text-[11px] text-slate-500">{theorem.why}</div>
+            {possibleIdeas.length === 0 && candidateTheorems.length === 0 ? (
+              <div className="text-sm text-slate-400">
+                {isGenerating ? 'AI 正在基于当前 Workspace 思考 possible proof...' : '点击 Generate Proof 后由 AI 生成对应的 possible proof。'}
+              </div>
+            ) : (
+              <>
+                <ul className="space-y-2 list-disc pl-4 text-sm text-slate-700 mb-4">
+                  {possibleIdeas.map((idea) => (
+                    <li key={idea}>{idea}</li>
+                  ))}
+                </ul>
+                <div className="space-y-2">
+                  {candidateTheorems.map((theorem) => (
+                    <div key={theorem.name} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div className="text-xs font-bold text-slate-800">{theorem.name}</div>
+                      <div className="text-[11px] text-slate-500">{theorem.why}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
           </section>
         </div>
 
