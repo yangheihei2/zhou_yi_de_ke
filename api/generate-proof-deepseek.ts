@@ -3,6 +3,15 @@ import { callDeepSeek } from './deepseek-client';
 const defaultModel = 'deepseek-chat';
 const allowedModels = new Set(['deepseek-chat', 'deepseek-reasoner']);
 
+type AttemptStatus = 'ok' | 'empty' | 'error';
+
+interface AttemptReport {
+  model: string;
+  promptType: 'full' | 'compact';
+  status: AttemptStatus;
+  detail: string;
+}
+
 function buildPrompt(theorem: string, assumptions: string, compact = false) {
   const base = `You are a mathematical proof assistant.
 Theorem: ${theorem}
@@ -33,6 +42,16 @@ function extractProofContent(data: any) {
   return raw.trim();
 }
 
+function buildReadableSummary(attempts: AttemptReport[]) {
+  if (attempts.length === 0) {
+    return 'No attempt was made.';
+  }
+
+  return attempts
+    .map((attempt, index) => `${index + 1}. [${attempt.model}/${attempt.promptType}] ${attempt.status.toUpperCase()}: ${attempt.detail}`)
+    .join(' | ');
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -40,7 +59,11 @@ export default async function handler(req: any, res: any) {
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: 'Server env DEEPSEEK_API_KEY is not configured.' });
+    return res.status(500).json({
+      error: 'Server env DEEPSEEK_API_KEY is not configured.',
+      errorCode: 'DEEPSEEK_KEY_MISSING',
+      userHint: '请先在服务端配置 DEEPSEEK_API_KEY。',
+    });
   }
 
   const theorem = typeof req.body?.theorem === 'string' ? req.body.theorem : '';
@@ -55,38 +78,70 @@ export default async function handler(req: any, res: any) {
   try {
     const fallbackModel = model === 'deepseek-chat' ? 'deepseek-reasoner' : 'deepseek-chat';
     const modelCandidates = [model, fallbackModel].filter((candidate, idx, arr) => arr.indexOf(candidate) === idx);
-    const promptCandidates = [buildPrompt(theorem, assumptions, false), buildPrompt(theorem, assumptions, true)];
-    const errors: string[] = [];
+    const promptCandidates = [
+      { type: 'full' as const, content: buildPrompt(theorem, assumptions, false) },
+      { type: 'compact' as const, content: buildPrompt(theorem, assumptions, true) },
+    ];
+    const attempts: AttemptReport[] = [];
 
     for (const candidateModel of modelCandidates) {
-      for (let promptIndex = 0; promptIndex < promptCandidates.length; promptIndex += 1) {
+      for (const promptCandidate of promptCandidates) {
         try {
           const data = await callDeepSeek({
             apiKey,
             model: candidateModel,
-            messages: [{ role: 'user', content: promptCandidates[promptIndex] }],
+            messages: [{ role: 'user', content: promptCandidate.content }],
             temperature: 0.2,
           });
 
           const proof = extractProofContent(data);
           if (proof) {
-            return res.status(200).json({ proof, modelUsed: candidateModel, compactPrompt: promptIndex === 1 });
+            attempts.push({
+              model: candidateModel,
+              promptType: promptCandidate.type,
+              status: 'ok',
+              detail: 'non-empty proof returned',
+            });
+            return res.status(200).json({
+              proof,
+              modelUsed: candidateModel,
+              compactPrompt: promptCandidate.type === 'compact',
+              attempts,
+            });
           }
 
-          errors.push(`${candidateModel}/prompt${promptIndex + 1}: empty content`);
+          attempts.push({
+            model: candidateModel,
+            promptType: promptCandidate.type,
+            status: 'empty',
+            detail: 'API returned empty content',
+          });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown DeepSeek request error.';
-          errors.push(`${candidateModel}/prompt${promptIndex + 1}: ${message}`);
+          attempts.push({
+            model: candidateModel,
+            promptType: promptCandidate.type,
+            status: 'error',
+            detail: message,
+          });
         }
       }
     }
 
     return res.status(502).json({
-      error: `DeepSeek proof generation failed after retries and model fallback. ${errors.join(' | ')}`,
+      error: 'DeepSeek proof generation failed after all fallback attempts.',
+      errorCode: 'DEEPSEEK_GENERATION_ALL_ATTEMPTS_FAILED',
+      userHint: '模型请求已自动重试并切换模型，但仍失败。请稍后重试，或先切换到 Gemini 验证输入是否正常。',
+      summary: buildReadableSummary(attempts),
+      attempts,
     });
   } catch (error) {
     console.error('DeepSeek generator error:', error);
     const message = error instanceof Error ? error.message : 'DeepSeek request failed. Please retry later.';
-    return res.status(500).json({ error: message });
+    return res.status(500).json({
+      error: message,
+      errorCode: 'DEEPSEEK_GENERATION_UNCAUGHT_ERROR',
+      userHint: '服务端出现未捕获错误，请查看日志。',
+    });
   }
 }
