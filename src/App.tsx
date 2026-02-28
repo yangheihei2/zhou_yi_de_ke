@@ -43,6 +43,21 @@ interface GenerateProofResponse {
   proof: string;
 }
 
+interface ApiAttemptReport {
+  model?: string;
+  promptType?: 'full' | 'compact';
+  status?: 'ok' | 'empty' | 'error';
+  detail?: string;
+}
+
+interface ApiErrorPayload {
+  error?: string;
+  errorCode?: string;
+  userHint?: string;
+  summary?: string;
+  attempts?: ApiAttemptReport[];
+}
+
 type VerifierDecision = 'PASS' | 'MINOR_FIX' | 'REGENERATE';
 
 interface VerifyProofResponse {
@@ -90,6 +105,19 @@ declare global {
       };
     };
   }
+}
+
+function buildPipelineErrorMessage(stage: string, rawError: string) {
+  const stageMap: Record<string, string> = {
+    initialization: 'initialization',
+    'idea brainstorming': 'idea brainstorming',
+    'candidate proof generation': 'candidate proof generation',
+    'proof verification': 'proof verification',
+    'proof revision': 'proof revision',
+  };
+
+  const displayStage = stageMap[stage] || stage;
+  return `Pipeline failed during ${displayStage}: ${rawError}`;
 }
 
 function normalizeForMathJax(content: string) {
@@ -266,6 +294,23 @@ export default function App() {
       return `${baseProof}\n\n---\n\nRisk Notes:\n${riskNotes.map((note, index) => `${index + 1}. ${note}`).join('\n')}`;
     };
 
+    const parseApiError = (body: ApiErrorPayload, fallback: string, status?: number, statusText?: string, rawText?: string) => {
+      const headline = body.error || fallback;
+      const code = body.errorCode ? ` [${body.errorCode}]` : '';
+      const hint = body.userHint ? ` Hint: ${body.userHint}` : '';
+      const summary = body.summary ? ` Details: ${body.summary}` : '';
+      const attempts = Array.isArray(body.attempts)
+        ? body.attempts
+            .slice(0, 4)
+            .map((attempt, idx) => `${idx + 1}) ${attempt.model || 'unknown-model'}/${attempt.promptType || 'unknown-prompt'}: ${attempt.detail || attempt.status || 'no detail'}`)
+            .join('; ')
+        : '';
+      const attemptText = attempts ? ` Attempts: ${attempts}` : '';
+      const http = typeof status === 'number' ? ` HTTP ${status}${statusText ? ` ${statusText}` : ''}.` : '';
+      const raw = !body.error && rawText ? ` Raw response: ${rawText.slice(0, 280)}` : '';
+      return `${headline}${code}.${http}${hint}${summary}${attemptText}${raw}`.trim();
+    };
+
     const fetchProof = async () => {
       pipelineStage = 'candidate proof generation';
       const proofResponse = await fetch(selectedModelOption.apiPath, {
@@ -274,13 +319,25 @@ export default function App() {
         body: JSON.stringify({ theorem, assumptions, model: selectedModelOption.id }),
       });
 
-      if (!proofResponse.ok) {
-        const body = await proofResponse.json().catch(() => ({}));
-        throw new Error(body.error || 'Failed to generate proof.');
+      const rawText = await proofResponse.text();
+      let parsedBody: ApiErrorPayload | GenerateProofResponse = {};
+      try {
+        parsedBody = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        parsedBody = {};
       }
 
-      const proofData: GenerateProofResponse = await proofResponse.json();
-      return proofData.proof || 'Failed to generate proof.';
+      if (!proofResponse.ok) {
+        const body = parsedBody as ApiErrorPayload;
+        throw new Error(parseApiError(body, 'Failed to generate proof.', proofResponse.status, proofResponse.statusText, rawText));
+      }
+
+      const proofData = parsedBody as GenerateProofResponse;
+      const candidate = typeof proofData.proof === 'string' ? proofData.proof.trim() : '';
+      if (!candidate) {
+        throw new Error('Generator returned an empty proof. This usually indicates an upstream model timeout or empty response.');
+      }
+      return candidate;
     };
 
     const verifyProof = async (candidateProof: string) => {
@@ -395,7 +452,7 @@ export default function App() {
     } catch (error: unknown) {
       console.error(error);
       const rawError = error instanceof Error ? error.message : 'Unknown server error.';
-      const detailedError = `Proof pipeline failed during ${pipelineStage}. Details: ${rawError}. Please check API availability/configuration and retry.`;
+      const detailedError = buildPipelineErrorMessage(pipelineStage, rawError);
       setErrorMessage(detailedError);
       addLog(`Pipeline error at ${pipelineStage}: ${rawError}`, 'error');
     } finally {
