@@ -51,6 +51,27 @@ interface ModelOption {
   apiPath: string;
 }
 
+const MODEL_OPTIONS: ModelOption[] = [
+  {
+    id: 'gemini-2.5-flash',
+    label: 'Gemini 2.5 Flash',
+    provider: 'gemini',
+    apiPath: '/api/generate-proof',
+  },
+  {
+    id: 'deepseek-chat',
+    label: 'DeepSeek Chat',
+    provider: 'deepseek',
+    apiPath: '/api/generate-proof-deepseek',
+  },
+  {
+    id: 'deepseek-reasoner',
+    label: 'DeepSeek Reasoner',
+    provider: 'deepseek',
+    apiPath: '/api/generate-proof-deepseek',
+  },
+];
+
 export default function App() {
   const [theorem, setTheorem] = useState("Prove that every continuous function on a closed interval [a, b] is bounded and attains its maximum and minimum values.");
   const [assumptions, setAssumptions] = useState("- f is continuous on the interval I = [a, b]\n- I is compact in the standard topology of R");
@@ -62,33 +83,12 @@ export default function App() {
   const [proof, setProof] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'formatted' | 'source'>('formatted');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [selectedModelId, setSelectedModelId] = useState('gemini-2.5-flash');
+  const [selectedModelId, setSelectedModelId] = useState(MODEL_OPTIONS[0].id);
   
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  const modelOptions: ModelOption[] = [
-    {
-      id: 'gemini-2.5-flash',
-      label: 'Gemini 2.5 Flash',
-      provider: 'gemini',
-      apiPath: '/api/generate-proof',
-    },
-    {
-      id: 'deepseek-chat',
-      label: 'DeepSeek Chat',
-      provider: 'deepseek',
-      apiPath: '/api/generate-proof-deepseek',
-    },
-    {
-      id: 'deepseek-reasoner',
-      label: 'DeepSeek Reasoner',
-      provider: 'deepseek',
-      apiPath: '/api/generate-proof-deepseek',
-    },
-  ];
-
   const selectedModel =
-    modelOptions.find((option) => option.id === selectedModelId) || modelOptions[0];
+    MODEL_OPTIONS.find((option) => option.id === selectedModelId) || MODEL_OPTIONS[0];
 
   const literatureMatches: LiteratureMatch[] = [
     {
@@ -209,7 +209,7 @@ export default function App() {
                 className="text-sm font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded px-2 py-1"
                 disabled={isGenerating}
               >
-                {modelOptions.map((option) => (
+                {MODEL_OPTIONS.map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.label}
                   </option>
