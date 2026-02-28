@@ -1,88 +1,93 @@
-# Proof Assistant（Vite + React + Vercel）
+# 数学证明助手（Proof Assistant）
 
-这是一个数学证明助手应用，前端使用 React + Vite，后端使用 Vercel Serverless Functions，支持 **Gemini** 和 **DeepSeek** 两套模型。
-
-## 你需要做的事（部署到 Vercel）
-
-1. 把仓库推送到 GitHub。
-2. 在 Vercel 导入该仓库。
-3. 在 Vercel 环境变量中至少配置：
-   - `GEMINI_API_KEY`
-   - `DEEPSEEK_API_KEY`（如果你要在页面选择 DeepSeek）
-4. 点击 Deploy。
-5. 部署后打开页面：先选模型，再点击 `Generate Proof`。
+一个面向“证明思路整理 + 证明草稿生成”的 Web 项目。  
+你输入**定理陈述**和**已知条件**，系统会先给你可行的证明路线，再生成可渲染（MathJax）的证明文本。
 
 ---
 
+## 这个项目可以做什么？
 
-## 本次交互改动（按你的需求）
+### 1) 自动生成“可执行”的证明思路
+- 根据你输入的问题，先返回：
+  - `Possible Proof Ideas`（可能的证明路线）
+  - `Candidate Theorems`（候选定理 + 为什么有用）
+- 适合在正式写证明前，先做“路线筛选”。
 
-- 默认初始问题已替换为你给的“阈值控制/分位数”风格问题。
-- 右侧 `Formatted` 视图改为 **Compiled**，并通过 MathJax 做前端公式渲染（接近“编译后”效果）。
-- 左侧最下方新增 `Possible Proof Ideas & Candidate Theorems` 框，会基于检索结果里最高分文献给出可能思路、候选定理名称和每个定理的用途说明。
+### 2) 生成证明草稿（支持公式渲染）
+- 支持把证明结果切换为：
+  - **Compiled**（MathJax 渲染视图）
+  - **Source**（原始文本）
+- 方便你二次编辑并粘贴到论文、笔记或教学材料。
 
-## 模型与 API 架构
-
-### 前端模型选择
-
-现在界面里可直接选择模型：
+### 3) 多模型可切换
 - `Gemini 2.5 Flash`
 - `DeepSeek Chat`
 - `DeepSeek Reasoner`
 
-前端会把 `theorem + assumptions + model` 发给对应 API。
-
-### 后端 API 列表
-
-- `POST /api/generate-proof`
-  - 用于 Gemini。
-  - 默认模型：`gemini-2.5-flash`。
-- `POST /api/generate-proof-deepseek`
-  - 用于 DeepSeek。
-  - 支持模型：`deepseek-chat`、`deepseek-reasoner`。
-
-### 为什么这样设计
-
-- **安全**：API Key 只在服务端读取，不进入浏览器 bundle。
-- **可扩展**：后面你要加更多模型，按同样方式加 API 或路由分发即可。
-- **更好排障**：Gemini / DeepSeek 错误来源分离，更容易定位问题。
+你可以在界面中切换模型，对比不同模型的证明风格与严谨度。
 
 ---
 
-## 本地开发
+## AI 思路（工作流）
 
-### 1) 安装依赖
+这个项目不是“直接一句话吐证明”，而是分阶段执行：
+
+1. **问题理解**：读取 Theorem + Assumptions。  
+2. **参考线索匹配**：根据关键词匹配内置文献候选（模拟检索与重排）。  
+3. **思路生成**：调用 ideas API，先返回证明想法和候选定理。  
+4. **证明生成**：调用 proof API，输出结构化证明（Theorem / Key Lemmas / Proof / Conclusion）。  
+5. **前端编译展示**：用 MathJax 渲染，得到接近“编译后”的阅读体验。
+
+> 这样设计的好处：
+> - 用户先看到“为什么这么证”，而不是只看到“结果”。
+> - 更适合教学、讨论和多人协作审稿。
+
+---
+
+## 项目架构
+
+- **前端**：React + Vite
+- **后端**：Vercel Serverless Functions
+- **模型接入**：Gemini / DeepSeek
+- **渲染**：MathJax
+
+### API 路由
+- `POST /api/generate-ideas`：Gemini 思路生成
+- `POST /api/generate-ideas-deepseek`：DeepSeek 思路生成
+- `POST /api/generate-proof`：Gemini 证明生成
+- `POST /api/generate-proof-deepseek`：DeepSeek 证明生成
+
+---
+
+## 快速开始（本地）
+
+### 1. 安装依赖
 
 ```bash
 npm install
 ```
 
-### 2) 配置环境变量
+### 2. 配置环境变量
 
-```bash
-cp .env.example .env.local
-```
-
-编辑 `.env.local`：
+创建 `.env.local`（或在 Vercel 配环境变量）：
 
 ```env
-GEMINI_API_KEY=your_real_gemini_key
-DEEPSEEK_API_KEY=your_real_deepseek_key
+GEMINI_API_KEY=your_gemini_key
+DEEPSEEK_API_KEY=your_deepseek_key
 ```
 
-> 若只测试 Gemini，可只配 `GEMINI_API_KEY`；但在 UI 选 DeepSeek 时必须有 `DEEPSEEK_API_KEY`。
+> 只使用 Gemini 时，可只配置 `GEMINI_API_KEY`。  
+> 若在 UI 选择 DeepSeek 模型，则必须配置 `DEEPSEEK_API_KEY`。
 
-### 3) 启动开发
+### 3. 启动开发环境
 
 ```bash
 npm run dev
 ```
 
-默认地址：`http://localhost:3000`
+默认访问：`http://localhost:3000`
 
----
-
-## 构建检查
+### 4. 质量检查
 
 ```bash
 npm run lint
@@ -91,33 +96,31 @@ npm run build
 
 ---
 
-## 常见问题
+## 部署（Vercel）
 
-### 1) `Server env GEMINI_API_KEY is not configured.`
+1. 将仓库推送到 GitHub。  
+2. 在 Vercel 导入该仓库。  
+3. 配置环境变量：
+   - `GEMINI_API_KEY`
+   - `DEEPSEEK_API_KEY`（如需 DeepSeek）
+4. 点击 Deploy。
 
-Gemini key 未配置（本地或 Vercel）。
+---
 
-### 2) `Server env DEEPSEEK_API_KEY is not configured.`
+## 适用场景
 
-你选择了 DeepSeek 模型，但服务端没有 `DEEPSEEK_API_KEY`。
+- 数学课程作业中的证明草稿探索
+- 论文写作前的证明路径头脑风暴
+- 团队讨论时快速对比不同证明策略
+- 教学中展示“从想法到证明”的完整链路
 
-### 3) `Gemini request failed` 或 `DeepSeek request failed`
+---
 
-可能原因：
-- key 无效 / 过期
-- 配额不足
-- 服务临时波动
+## 注意事项
 
-建议先本地验证 key，再检查 Vercel 中是否配置在正确环境（Production / Preview / Development）。
-
-
-### 4) Vercel 报错：`The symbol "selectedModel" has already been declared`
-
-如果你在 Vercel 构建日志看到这个错误：
-
-- 先确认已经拉到最新提交（本仓库已修复该重复声明问题）。
-- 在 Vercel 项目里点击 **Redeploy**，并勾选 **Use existing Build Cache = Off**（或清理缓存后再部署）。
-- 若仍失败，删除旧 Deployment 后重新触发一次部署，确保不是旧 commit 被重复构建。
+- 本项目输出的是 **AI 生成证明草稿**，不保证 100% 正确。  
+- 用于作业、论文或正式发表前，请务必人工校验关键步骤。  
+- 对高难度命题，建议结合文献与人工推导共同验证。
 
 ---
 
@@ -126,13 +129,17 @@ Gemini key 未配置（本地或 Vercel）。
 ```text
 .
 ├─ api/
-│  ├─ generate-proof.ts              # Gemini API
-│  └─ generate-proof-deepseek.ts     # DeepSeek API
+│  ├─ generate-ideas.ts
+│  ├─ generate-ideas-deepseek.ts
+│  ├─ generate-proof.ts
+│  └─ generate-proof-deepseek.ts
 ├─ src/
 │  ├─ App.tsx
 │  ├─ main.tsx
 │  └─ index.css
-├─ .env.example
-├─ vercel.json
-└─ package.json
+├─ index.html
+├─ package.json
+├─ tsconfig.json
+├─ vite.config.ts
+└─ vercel.json
 ```
