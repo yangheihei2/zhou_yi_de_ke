@@ -43,6 +43,21 @@ interface GenerateProofResponse {
   proof: string;
 }
 
+interface ApiAttemptReport {
+  model?: string;
+  promptType?: 'full' | 'compact';
+  status?: 'ok' | 'empty' | 'error';
+  detail?: string;
+}
+
+interface ApiErrorPayload {
+  error?: string;
+  errorCode?: string;
+  userHint?: string;
+  summary?: string;
+  attempts?: ApiAttemptReport[];
+}
+
 type VerifierDecision = 'PASS' | 'MINOR_FIX' | 'REGENERATE';
 
 interface VerifyProofResponse {
@@ -90,6 +105,19 @@ declare global {
       };
     };
   }
+}
+
+function buildPipelineErrorMessage(stage: string, rawError: string) {
+  const stageMap: Record<string, string> = {
+    initialization: '初始化',
+    'idea brainstorming': '思路生成',
+    'candidate proof generation': '候选证明生成',
+    'proof verification': '证明校验',
+    'proof revision': '证明修订',
+  };
+
+  const displayStage = stageMap[stage] || stage;
+  return `流程在「${displayStage}」阶段失败：${rawError}`;
 }
 
 function normalizeForMathJax(content: string) {
@@ -266,6 +294,21 @@ export default function App() {
       return `${baseProof}\n\n---\n\nRisk Notes:\n${riskNotes.map((note, index) => `${index + 1}. ${note}`).join('\n')}`;
     };
 
+    const parseApiError = (body: ApiErrorPayload, fallback: string) => {
+      const headline = body.error || fallback;
+      const code = body.errorCode ? ` [${body.errorCode}]` : '';
+      const hint = body.userHint ? ` 建议：${body.userHint}` : '';
+      const summary = body.summary ? ` 失败详情：${body.summary}` : '';
+      const attempts = Array.isArray(body.attempts)
+        ? body.attempts
+            .slice(0, 4)
+            .map((attempt, idx) => `${idx + 1}) ${attempt.model || 'unknown-model'}/${attempt.promptType || 'unknown-prompt'}: ${attempt.detail || attempt.status || 'no detail'}`)
+            .join('；')
+        : '';
+      const attemptText = attempts ? ` 尝试记录：${attempts}` : '';
+      return `${headline}${code}.${hint}${summary}${attemptText}`.trim();
+    };
+
     const fetchProof = async () => {
       pipelineStage = 'candidate proof generation';
       const proofResponse = await fetch(selectedModelOption.apiPath, {
@@ -275,12 +318,16 @@ export default function App() {
       });
 
       if (!proofResponse.ok) {
-        const body = await proofResponse.json().catch(() => ({}));
-        throw new Error(body.error || 'Failed to generate proof.');
+        const body: ApiErrorPayload = await proofResponse.json().catch(() => ({}));
+        throw new Error(parseApiError(body, 'Failed to generate proof.'));
       }
 
       const proofData: GenerateProofResponse = await proofResponse.json();
-      return proofData.proof || 'Failed to generate proof.';
+      const candidate = typeof proofData.proof === 'string' ? proofData.proof.trim() : '';
+      if (!candidate) {
+        throw new Error('Generator returned an empty proof. This usually indicates an upstream model timeout or empty response.');
+      }
+      return candidate;
     };
 
     const verifyProof = async (candidateProof: string) => {
@@ -395,7 +442,7 @@ export default function App() {
     } catch (error: unknown) {
       console.error(error);
       const rawError = error instanceof Error ? error.message : 'Unknown server error.';
-      const detailedError = `Proof pipeline failed during ${pipelineStage}. Details: ${rawError}. Please check API availability/configuration and retry.`;
+      const detailedError = buildPipelineErrorMessage(pipelineStage, rawError);
       setErrorMessage(detailedError);
       addLog(`Pipeline error at ${pipelineStage}: ${rawError}`, 'error');
     } finally {
