@@ -14,6 +14,13 @@
 
 ---
 
+
+## 本次交互改动（按你的需求）
+
+- 默认初始问题已替换为你给的“阈值控制/分位数”风格问题。
+- 右侧 `Formatted` 视图改为 **Compiled**，并通过 MathJax 做前端公式渲染（接近“编译后”效果）。
+- 左侧最下方新增 `Possible Proof Ideas & Candidate Theorems` 框，会基于检索结果里最高分文献给出可能思路、候选定理名称和每个定理的用途说明。
+
 ## 模型与 API 架构
 
 ### 前端模型选择
@@ -102,6 +109,15 @@ Gemini key 未配置（本地或 Vercel）。
 - 服务临时波动
 
 建议先本地验证 key，再检查 Vercel 中是否配置在正确环境（Production / Preview / Development）。
+
+
+### 4) Vercel 报错：`The symbol "selectedModel" has already been declared`
+
+如果你在 Vercel 构建日志看到这个错误：
+
+- 先确认已经拉到最新提交（本仓库已修复该重复声明问题）。
+- 在 Vercel 项目里点击 **Redeploy**，并勾选 **Use existing Build Cache = Off**（或清理缓存后再部署）。
+- 若仍失败，删除旧 Deployment 后重新触发一次部署，确保不是旧 commit 被重复构建。
 
 ---
 

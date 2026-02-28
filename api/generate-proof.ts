@@ -25,11 +25,13 @@ export default async function handler(req: any, res: any) {
 Theorem: ${theorem}
 Assumptions: ${assumptions}
 
-Generate a formal, rigorous mathematical proof in LaTeX format.
-Include a "Theorem" section and a "Proof" section.
-Use bold text for key theorems like "Heine-Borel Theorem".
-End the proof with a QED symbol (■).
-Make it look like a professional academic paper.`;
+Return a proof that can be directly rendered by MathJax in a web page.
+Requirements:
+1) Use readable sections: Theorem, Key Lemmas, Proof, and Conclusion.
+2) Write normal text plus math expressions using \(...\) and \[...\].
+3) Do not output full LaTeX document preamble (no \documentclass, \begin{document}, etc).
+4) Keep the argument rigorous and concise.
+5) End with \qed or an explicit QED statement.`;
 
   try {
     const genAI = new GoogleGenAI({ apiKey });
