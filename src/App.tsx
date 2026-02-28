@@ -43,6 +43,18 @@ interface GenerateProofResponse {
   proof: string;
 }
 
+type VerifierDecision = 'PASS' | 'MINOR_FIX' | 'REGENERATE';
+
+interface VerifyProofResponse {
+  decision: VerifierDecision;
+  feedback: string;
+  riskLevel?: 'low' | 'medium' | 'high';
+}
+
+interface ReviseProofResponse {
+  revisedProof: string;
+}
+
 interface GenerateIdeasResponse {
   ideas: string[];
   candidateTheorems: CandidateTheorem[];
@@ -229,58 +241,146 @@ export default function App() {
     setPossibleIdeas([]);
     setCandidateTheorems([]);
     setProgress(1);
-    addLog(`Querying vector database for relevant literature (${selectedModelOption.label})...`, 'info');
+    addLog(`Generator initialized with ${selectedModelOption.label}.`, 'info');
 
-    setTimeout(() => {
-      setProgress(2);
-      addLog('Literature search complete. Found 12 matches.', 'success');
-      addLog('Prover Agent drafting threshold-control proof path...', 'info');
-    }, 1400);
+    const verifyApiPath = selectedModelOption.provider === 'gemini' ? '/api/verify-proof' : '/api/verify-proof-deepseek';
+    const reviseApiPath = selectedModelOption.provider === 'gemini' ? '/api/revise-proof' : '/api/revise-proof-deepseek';
 
-    setTimeout(() => {
-      setProgress(3);
-      addLog('Draft complete. Skeptic Agent checking finite-sample assumptions...', 'warning');
-    }, 2800);
+    const maxMinorFixRounds = 3;
+    const maxRegenerateRounds = 2;
 
-    try {
-      const [proofResponse, ideasResponse] = await Promise.all([
-        fetch(selectedModelOption.apiPath, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ theorem, assumptions, model: selectedModelOption.id }),
-        }),
-        fetch(selectedModelOption.ideasApiPath, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ theorem, assumptions, literature: literatureMatches, model: selectedModelOption.id }),
-        }),
-      ]);
+    const appendRiskSummary = (baseProof: string, riskNotes: string[]) => {
+      if (riskNotes.length === 0) return baseProof;
+      return `${baseProof}\n\n---\n\nRisk Notes:\n${riskNotes.map((note, index) => `${index + 1}. ${note}`).join('\n')}`;
+    };
+
+    const fetchProof = async () => {
+      const proofResponse = await fetch(selectedModelOption.apiPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theorem, assumptions, model: selectedModelOption.id }),
+      });
 
       if (!proofResponse.ok) {
         const body = await proofResponse.json().catch(() => ({}));
         throw new Error(body.error || 'Failed to generate proof.');
       }
 
-      const data: GenerateProofResponse = await proofResponse.json();
-      setProof(data.proof || 'Failed to generate proof.');
+      const proofData: GenerateProofResponse = await proofResponse.json();
+      return proofData.proof || 'Failed to generate proof.';
+    };
+
+    const verifyProof = async (candidateProof: string) => {
+      const verifyResponse = await fetch(verifyApiPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theorem, assumptions, proof: candidateProof, model: selectedModelOption.id }),
+      });
+
+      if (!verifyResponse.ok) {
+        const body = await verifyResponse.json().catch(() => ({}));
+        throw new Error(body.error || 'Proof verification failed.');
+      }
+
+      const verifyData: VerifyProofResponse = await verifyResponse.json();
+      return verifyData;
+    };
+
+    const reviseProof = async (candidateProof: string, feedback: string) => {
+      const reviseResponse = await fetch(reviseApiPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theorem, assumptions, proof: candidateProof, feedback, model: selectedModelOption.id }),
+      });
+
+      if (!reviseResponse.ok) {
+        const body = await reviseResponse.json().catch(() => ({}));
+        throw new Error(body.error || 'Proof revision failed.');
+      }
+
+      const reviseData: ReviseProofResponse = await reviseResponse.json();
+      return reviseData.revisedProof || candidateProof;
+    };
+
+    try {
+      const ideasResponse = await fetch(selectedModelOption.ideasApiPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theorem, assumptions, literature: literatureMatches, model: selectedModelOption.id }),
+      });
 
       if (ideasResponse.ok) {
         const ideasData: GenerateIdeasResponse = await ideasResponse.json();
         setPossibleIdeas(Array.isArray(ideasData.ideas) ? ideasData.ideas : []);
         setCandidateTheorems(Array.isArray(ideasData.candidateTheorems) ? ideasData.candidateTheorems : []);
-        addLog('AI generated possible proof ideas.', 'success');
+        addLog('Generator brainstormed proof ideas and candidate theorems.', 'success');
       } else {
-        addLog('Possible proof ideas generation failed, skipped this round.', 'warning');
+        addLog('Idea generation failed, continuing with proof pipeline.', 'warning');
       }
 
-      setProgress(4);
-      setIsGenerating(false);
-      addLog('LaTeX Refiner completed formatting.', 'success');
-      addLog(`Proof generation successful via ${selectedModelOption.label}.`, 'success');
+      let bestProof = '';
+      const riskNotes: string[] = [];
+      let finalProof = '';
+      let completed = false;
+
+      for (let regenerateRound = 0; regenerateRound <= maxRegenerateRounds && !completed; regenerateRound += 1) {
+        setProgress(1);
+        addLog(`Generator pass ${regenerateRound + 1}: drafting candidate proof...`, 'info');
+        let candidateProof = await fetchProof();
+        bestProof = candidateProof;
+
+        for (let minorFixRound = 0; minorFixRound <= maxMinorFixRounds; minorFixRound += 1) {
+          setProgress(2);
+          addLog(`Verifier review ${minorFixRound + 1}: checking logical soundness and assumptions.`, 'info');
+
+          const verifyData = await verifyProof(candidateProof);
+          const decision = verifyData.decision;
+
+          if (decision === 'PASS') {
+            setProgress(4);
+            completed = true;
+            finalProof = appendRiskSummary(candidateProof, riskNotes);
+            addLog('Verifier accepted candidate proof. Pipeline completed.', 'success');
+            break;
+          }
+
+          if (decision === 'MINOR_FIX') {
+            if (minorFixRound >= maxMinorFixRounds) {
+              riskNotes.push(`Minor-fix budget reached. Last verifier feedback: ${verifyData.feedback}`);
+              addLog('Minor-fix iteration limit reached; escalating to regenerate.', 'warning');
+              break;
+            }
+
+            setProgress(3);
+            addLog(`Verifier requested revision: ${verifyData.feedback}`, 'warning');
+            candidateProof = await reviseProof(candidateProof, verifyData.feedback);
+            bestProof = candidateProof;
+            addLog(`Reviser completed patch ${minorFixRound + 1}.`, 'success');
+            continue;
+          }
+
+          riskNotes.push(`Critical flaw flagged: ${verifyData.feedback}`);
+          addLog(`Verifier marked critically flawed: ${verifyData.feedback}`, 'error');
+          break;
+        }
+      }
+
+      if (!completed) {
+        finalProof = appendRiskSummary(bestProof || 'No reliable proof could be generated.', [
+          ...riskNotes,
+          'Reached regenerate/minor-fix limits. This is the best available draft and requires manual verification.',
+        ]);
+        addLog('Pipeline stopped at iteration limits. Returned best available draft with risk notes.', 'warning');
+        setProgress(4);
+      }
+
+      setProof(finalProof);
+      addLog(`Proof pipeline finished via ${selectedModelOption.label}.`, completed ? 'success' : 'warning');
     } catch (error: unknown) {
       console.error(error);
       setErrorMessage(error instanceof Error ? error.message : 'Unknown server error.');
       addLog('Error during proof generation.', 'error');
+    } finally {
       setIsGenerating(false);
     }
   };
@@ -448,10 +548,10 @@ export default function App() {
 
             <div className="space-y-8 flex-1">
               {[
-                { id: 1, name: 'Search Module', desc: 'Cross-referenced 320 documents' },
-                { id: 2, name: 'Prover Agent', desc: 'Drafted threshold proof path' },
-                { id: 3, name: 'Skeptic Agent', desc: 'Checking assumptions and edge cases...' },
-                { id: 4, name: 'LaTeX Refiner', desc: 'Compiling display-ready output...' },
+                { id: 1, name: 'Generator', desc: 'Drafting / regenerating candidate proof' },
+                { id: 2, name: 'Verifier', desc: 'PASS / MINOR_FIX / REGENERATE decision' },
+                { id: 3, name: 'Reviser', desc: 'Applies targeted patch for minor flaws' },
+                { id: 4, name: 'Finalize', desc: 'Return final proof or best draft + risks' },
               ].map((step) => (
                 <div key={step.id} className="flex items-start gap-4">
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${progress > step.id ? 'bg-emerald-100 text-emerald-600' : progress === step.id ? 'bg-[#064e3b] text-white' : 'border-2 border-slate-200 text-slate-400'}`}>
