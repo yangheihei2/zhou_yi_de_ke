@@ -65,7 +65,8 @@ Requirements:
 - ideas must be specific to this theorem statement, not generic templates.
 - keep 3-5 ideas and up to 3 candidate theorems.
 - if theorem is about a.s. convergence => convergence in probability, include the key epsilon-event argument.
-- response language: Chinese.`;
+- response language: English.
+- math expressions should be MathJax-friendly (use \(...\) and \[...\] when needed).`;
 
   try {
     const response = await fetch('https://api.deepseek.com/chat/completions', {

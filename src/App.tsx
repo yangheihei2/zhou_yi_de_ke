@@ -158,9 +158,11 @@ export default function App() {
   const [selectedModelId, setSelectedModelId] = useState('gemini-2.5-flash');
   const [possibleIdeas, setPossibleIdeas] = useState<string[]>([]);
   const [candidateTheorems, setCandidateTheorems] = useState<CandidateTheorem[]>([]);
+  const [ideasTab, setIdeasTab] = useState<'compiled' | 'source'>('compiled');
 
   const logEndRef = useRef<HTMLDivElement>(null);
   const proofRef = useRef<HTMLDivElement>(null);
+  const ideasRef = useRef<HTMLDivElement>(null);
 
   const selectedModelOption = MODEL_OPTIONS.find((option) => option.id === selectedModelId) || MODEL_OPTIONS[0];
 
@@ -231,6 +233,11 @@ export default function App() {
     if (!proof || activeTab !== 'formatted' || !window.MathJax?.typesetPromise || !proofRef.current) return;
     window.MathJax.typesetPromise([proofRef.current]).catch((err) => console.error(err));
   }, [proof, activeTab]);
+
+  useEffect(() => {
+    if (ideasTab !== 'compiled' || !window.MathJax?.typesetPromise || !ideasRef.current) return;
+    window.MathJax.typesetPromise([ideasRef.current]).catch((err) => console.error(err));
+  }, [ideasTab, possibleIdeas, candidateTheorems]);
 
   const handleGenerate = async () => {
     if (isGenerating) return;
@@ -512,12 +519,33 @@ export default function App() {
           </section>
 
           <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-            <h2 className="font-bold text-xs text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Lightbulb size={14} /> Possible Proof Ideas & Candidate Theorems
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-xs text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <Lightbulb size={14} /> Possible Proof Ideas & Candidate Theorems
+              </h2>
+              <div className="flex bg-white border border-slate-200 rounded p-1">
+                <button onClick={() => setIdeasTab('source')} className={`px-3 py-1 text-[11px] font-bold rounded transition-all ${ideasTab === 'source' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>Source</button>
+                <button onClick={() => setIdeasTab('compiled')} className={`px-3 py-1 text-[11px] font-bold rounded transition-all ${ideasTab === 'compiled' ? 'bg-[#064e3b] text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Compiled</button>
+              </div>
+            </div>
             {possibleIdeas.length === 0 && candidateTheorems.length === 0 ? (
               <div className="text-sm text-slate-400">
-                {isGenerating ? 'AI 正在基于当前 Workspace 思考 possible proof...' : '点击 Generate Proof 后由 AI 生成对应的 possible proof。'}
+                {isGenerating ? 'AI is analyzing the current workspace and drafting possible proof ideas...' : 'Click Generate Proof to produce possible proof ideas and candidate theorems.'}
+              </div>
+            ) : ideasTab === 'compiled' ? (
+              <div ref={ideasRef} className="space-y-3 text-sm text-slate-700">
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="text-xs font-bold text-slate-800 mb-2">Possible Ideas</div>
+                  <div className="whitespace-pre-wrap leading-6">
+                    {normalizeForMathJax(possibleIdeas.map((idea, idx) => `${idx + 1}. ${idea}`).join('\n'))}
+                  </div>
+                </div>
+                {candidateTheorems.map((theorem) => (
+                  <div key={theorem.name} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                    <div className="text-xs font-bold text-slate-800">{normalizeForMathJax(theorem.name)}</div>
+                    <div className="text-[11px] text-slate-500 whitespace-pre-wrap">{normalizeForMathJax(theorem.why)}</div>
+                  </div>
+                ))}
               </div>
             ) : (
               <>

@@ -47,6 +47,40 @@
 
 ---
 
+
+## Detailed AI Design (English)
+
+### What this AI system does
+This project is a **proof-assistant workflow** rather than a single-shot text generator. Given a theorem statement and assumptions, it:
+1. drafts possible proof directions,
+2. drafts a candidate proof,
+3. verifies the candidate,
+4. revises locally when possible,
+5. regenerates when needed,
+6. returns the final proof (or best draft with risk notes).
+
+### How it works (pipeline)
+- **Input understanding**: reads theorem + assumptions from the workspace.
+- **Literature signal matching**: computes keyword-tag matches over a built-in literature corpus and sends the top matches as context.
+- **Generator**: proposes ideas and drafts a proof candidate.
+- **Verifier**: classifies the draft as `PASS`, `MINOR_FIX`, or `REGENERATE`.
+- **Reviser**: applies targeted edits when verifier says `MINOR_FIX`.
+- **Regeneration loop**: sends control back to Generator when flaws are structural.
+- **Termination policy**: if loop limits are hit, returns best available draft with explicit risk notes.
+
+### How accuracy is improved
+Accuracy gains come from **process constraints**, not just model size:
+- **Multi-stage checking** reduces one-pass hallucinations.
+- **Verifier gating** blocks weak drafts from being returned directly.
+- **Targeted patching** (minor-fix path) keeps correct parts stable and edits only failing steps.
+- **Controlled regeneration** avoids endless loops while still allowing recovery.
+- **Risk-note fallback** ensures uncertainty is surfaced instead of hidden.
+- **MathJax-oriented output rules** keep formulas structurally readable and reviewable.
+- **Literature-match context** nudges model reasoning toward relevant known techniques.
+
+### Current limitation and next upgrade
+Current literature grounding uses a **local candidate corpus + keyword scoring** (simulated retrieval), not full-text retrieval over external papers. A next upgrade is adding true retrieval/RAG with citation-level evidence for each proof step.
+
 ## 项目架构
 
 - **前端**：React + Vite
