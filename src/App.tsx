@@ -107,6 +107,9 @@ export default function App() {
 
   const selectedModel = MODEL_OPTIONS.find((option) => option.id === selectedModelId) || MODEL_OPTIONS[0];
 
+  const selectedModel =
+    MODEL_OPTIONS.find((option) => option.id === selectedModelId) || MODEL_OPTIONS[0];
+
   const literatureMatches: LiteratureMatch[] = [
     {
       title: 'Adaptive Thresholding with Finite-Sample Guarantees',
