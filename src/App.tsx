@@ -248,6 +248,7 @@ export default function App() {
 
     const maxMinorFixRounds = 3;
     const maxRegenerateRounds = 2;
+    let pipelineStage = 'initialization';
 
     const appendRiskSummary = (baseProof: string, riskNotes: string[]) => {
       if (riskNotes.length === 0) return baseProof;
@@ -255,6 +256,7 @@ export default function App() {
     };
 
     const fetchProof = async () => {
+      pipelineStage = 'candidate proof generation';
       const proofResponse = await fetch(selectedModelOption.apiPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -271,6 +273,7 @@ export default function App() {
     };
 
     const verifyProof = async (candidateProof: string) => {
+      pipelineStage = 'proof verification';
       const verifyResponse = await fetch(verifyApiPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -287,6 +290,7 @@ export default function App() {
     };
 
     const reviseProof = async (candidateProof: string, feedback: string) => {
+      pipelineStage = 'proof revision';
       const reviseResponse = await fetch(reviseApiPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -303,6 +307,7 @@ export default function App() {
     };
 
     try {
+      pipelineStage = 'idea brainstorming';
       const ideasResponse = await fetch(selectedModelOption.ideasApiPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -378,8 +383,10 @@ export default function App() {
       addLog(`Proof pipeline finished via ${selectedModelOption.label}.`, completed ? 'success' : 'warning');
     } catch (error: unknown) {
       console.error(error);
-      setErrorMessage(error instanceof Error ? error.message : 'Unknown server error.');
-      addLog('Error during proof generation.', 'error');
+      const rawError = error instanceof Error ? error.message : 'Unknown server error.';
+      const detailedError = `Proof pipeline failed during ${pipelineStage}. Details: ${rawError}. Please check API availability/configuration and retry.`;
+      setErrorMessage(detailedError);
+      addLog(`Pipeline error at ${pipelineStage}: ${rawError}`, 'error');
     } finally {
       setIsGenerating(false);
     }
@@ -517,7 +524,9 @@ export default function App() {
             </h2>
             {possibleIdeas.length === 0 && candidateTheorems.length === 0 ? (
               <div className="text-sm text-slate-400">
-                {isGenerating ? 'AI 正在基于当前 Workspace 思考 possible proof...' : '点击 Generate Proof 后由 AI 生成对应的 possible proof。'}
+                {isGenerating
+                  ? 'AI is analyzing the current workspace to propose possible proof ideas...'
+                  : 'Click Generate Proof to let AI produce possible proof ideas for this workspace.'}
               </div>
             ) : (
               <>
